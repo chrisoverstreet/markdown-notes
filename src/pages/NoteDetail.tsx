@@ -62,13 +62,33 @@ export default function NoteDetail() {
 
   const handleContentKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key !== 'Enter' || !e.shiftKey) return;
       const textarea = e.currentTarget;
       const value = content;
       const start = textarea.selectionStart;
       const lineStart = value.lastIndexOf('\n', start - 1) + 1;
       const lineEndIdx = value.indexOf('\n', start);
       const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx;
+
+      // Cmd+X: cut current line to clipboard and delete it
+      if (e.key === 'x' && e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey) {
+        const lineEndInclusive = lineEndIdx === -1 ? value.length : lineEndIdx + 1;
+        const lineText = value.slice(lineStart, lineEndInclusive);
+        if (lineText.length > 0) {
+          e.preventDefault();
+          navigator.clipboard.writeText(lineText).then(() => {
+            const newContent = value.slice(0, lineStart) + value.slice(lineEndInclusive);
+            setContent(newContent);
+            setTimeout(() => {
+              contentTextareaRef.current?.focus();
+              const newCursor = Math.min(lineStart, newContent.length);
+              contentTextareaRef.current?.setSelectionRange(newCursor, newCursor);
+            }, 0);
+          });
+        }
+        return;
+      }
+
+      if (e.key !== 'Enter' || !e.shiftKey) return;
 
       if (e.metaKey) {
         // Cmd+Shift+Enter: new line before current, cursor there
