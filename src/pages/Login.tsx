@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import ThemeToggle from '../components/ThemeToggle';
 import { useAuth } from '../lib/auth';
-import { useTheme, type ThemePreference } from '../lib/theme';
 
 export default function Login() {
   const { user, loading, login, register } = useAuth();
-  const { preference, setPreference } = useTheme();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isRegister, setIsRegister] = useState(false);
@@ -35,20 +34,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 px-4 dark:bg-gray-900">
       <div className="flex justify-end pt-4 shrink-0">
-        <label htmlFor="theme-toggle-login" className="sr-only">
-          Theme
-        </label>
-        <select
-          id="theme-toggle-login"
-          value={preference}
-          onChange={(e) => setPreference(e.target.value as ThemePreference)}
-          className="text-sm rounded border border-gray-200 bg-white py-1.5 pl-2 pr-7 text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:focus:ring-gray-500"
-          aria-label="Theme"
-        >
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-          <option value="system">System</option>
-        </select>
+        <ThemeToggle />
       </div>
       <div className="flex-1 flex items-center justify-center -mt-12">
         <div className="w-full max-w-sm">

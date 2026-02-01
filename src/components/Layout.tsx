@@ -1,10 +1,9 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { useTheme, type ThemePreference } from '../lib/theme';
+import ThemeToggle from './ThemeToggle';
 
 export default function Layout() {
   const { user, logout } = useAuth();
-  const { preference, setPreference } = useTheme();
   const location = useLocation();
   const isNoteDetail = location.pathname.startsWith('/notes/');
 
@@ -21,20 +20,7 @@ export default function Layout() {
             Markdown Notes
           </Link>
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-            <label htmlFor="theme-toggle" className="sr-only">
-              Theme
-            </label>
-            <select
-              id="theme-toggle"
-              value={preference}
-              onChange={(e) => setPreference(e.target.value as ThemePreference)}
-              className="text-sm rounded border border-gray-200 bg-white py-1.5 pl-2 pr-7 text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200 dark:focus:ring-gray-500"
-              aria-label="Theme"
-            >
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-              <option value="system">System</option>
-            </select>
+            <ThemeToggle />
             <span className="text-sm text-gray-500 truncate max-w-[120px] sm:max-w-none dark:text-gray-400">
               {user?.username}
             </span>
