@@ -5,6 +5,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import { initDb } from './lib/db.js';
+import { NeonSessionStore } from './lib/session-store.js';
 import { authRouter } from './routes/auth.js';
 import { notesRouter } from './routes/notes.js';
 
@@ -28,6 +29,7 @@ async function main() {
   app.use(express.json());
   app.use(
     session({
+      store: new NeonSessionStore(),
       secret: sessionSecret,
       resave: false,
       saveUninitialized: false,

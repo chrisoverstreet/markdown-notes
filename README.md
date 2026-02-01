@@ -28,7 +28,6 @@ A minimalistic web app for recording notes in markdown. Built with TypeScript, R
 | `DATABASE_URL`   | Neon Postgres connection string                                             |
 | `PORT`           | Server port (default 3000)                                                  |
 | `SESSION_SECRET` | Secret for signing session cookies                                          |
-| `ENCRYPTION_KEY` | Optional; only needed to decrypt legacy server-encrypted notes (see below)  |
 
 Do not commit `.env` or `.env.local`; all secrets live in Doppler.
 

@@ -38,4 +38,15 @@ export async function initDb(): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS session (
+      sid TEXT NOT NULL PRIMARY KEY,
+      sess JSONB NOT NULL,
+      expire TIMESTAMPTZ NOT NULL
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS session_expire_idx ON session (expire)
+  `;
 }
