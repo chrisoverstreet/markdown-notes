@@ -7,7 +7,7 @@ export const notesRouter: ReturnType<typeof Router> = Router();
 notesRouter.use(requireAuth);
 
 notesRouter.get('/', async (req: Request, res: Response): Promise<void> => {
-  const userId = req.session?.userId;
+  const userId = req.userId;
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -23,7 +23,7 @@ notesRouter.get('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 notesRouter.get('/:id', async (req: Request, res: Response): Promise<void> => {
-  const userId = req.session?.userId;
+  const userId = req.userId;
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -48,7 +48,7 @@ notesRouter.get('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 notesRouter.post('/', async (req: Request, res: Response): Promise<void> => {
-  const userId = req.session?.userId;
+  const userId = req.userId;
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -68,7 +68,7 @@ notesRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 notesRouter.put('/:id', async (req: Request, res: Response): Promise<void> => {
-  const userId = req.session?.userId;
+  const userId = req.userId;
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;
@@ -97,7 +97,7 @@ notesRouter.put('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 notesRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => {
-  const userId = req.session?.userId;
+  const userId = req.userId;
   if (!userId) {
     res.status(401).json({ message: 'Unauthorized' });
     return;

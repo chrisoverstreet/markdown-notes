@@ -17,7 +17,7 @@ export interface Note {
 export default function NoteDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { dek } = useAuth();
+  const { dek, getAuthHeaders } = useAuth();
   const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(true);
@@ -28,7 +28,7 @@ export default function NoteDetail() {
 
   useEffect(() => {
     if (!id || !dek) return;
-    fetch(`/api/notes/${id}`, { credentials: 'include' })
+    fetch(`/api/notes/${id}`, { credentials: 'include', headers: getAuthHeaders() })
       .then((res) => {
         if (!res.ok) throw new Error('Note not found');
         return res.json();
@@ -45,7 +45,7 @@ export default function NoteDetail() {
       })
       .catch(() => navigate('/'))
       .finally(() => setLoading(false));
-  }, [id, dek, navigate]);
+  }, [id, dek, navigate, getAuthHeaders]);
 
   const save = async () => {
     if (!id || !dek) return;
@@ -55,7 +55,7 @@ export default function NoteDetail() {
       const encryptedContent = await encryptWithDEK(dek, content);
       const res = await fetch(`/api/notes/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         credentials: 'include',
         body: JSON.stringify({
           title: encryptedTitle,
@@ -79,7 +79,11 @@ export default function NoteDetail() {
 
   const remove = async () => {
     if (!id || !confirm('Delete this note?')) return;
-    const res = await fetch(`/api/notes/${id}`, { method: 'DELETE', credentials: 'include' });
+    const res = await fetch(`/api/notes/${id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: getAuthHeaders(),
+    });
     if (res.ok) navigate('/');
   };
 

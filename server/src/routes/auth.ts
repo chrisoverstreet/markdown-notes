@@ -6,6 +6,7 @@ import {
   verifyPassword,
   updateUserE2EE,
 } from '../lib/users.js';
+import { signToken } from '../lib/jwt.js';
 
 export const authRouter: ReturnType<typeof Router> = Router();
 
@@ -41,8 +42,9 @@ authRouter.post('/register', async (req: Request, res: Response): Promise<void> 
   }
   try {
     const user = await createUser(trimmed, password, { kek_salt, encrypted_dek });
-    req.session!.userId = user.id;
+    const token = signToken(user.id);
     res.status(201).json({
+      token,
       id: user.id,
       username: user.username,
       kek_salt: user.kek_salt,
@@ -69,8 +71,9 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
     res.status(401).json({ message: 'Invalid username or password' });
     return;
   }
-  req.session!.userId = user.id;
+  const token = signToken(user.id);
   res.json({
+    token,
     id: user.id,
     username: user.username,
     kek_salt: user.kek_salt,
@@ -79,7 +82,7 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
 });
 
 authRouter.post('/setup-e2ee', async (req: Request, res: Response): Promise<void> => {
-  const userId = req.session?.userId;
+  const userId = req.userId;
   if (!userId) {
     res.status(401).json({ message: 'Not logged in' });
     return;
@@ -97,13 +100,12 @@ authRouter.post('/setup-e2ee', async (req: Request, res: Response): Promise<void
   }
 });
 
-authRouter.post('/logout', (req: Request, res: Response): void => {
-  req.session?.destroy(() => {});
+authRouter.post('/logout', (_req: Request, res: Response): void => {
   res.status(204).end();
 });
 
 authRouter.get('/me', async (req: Request, res: Response): Promise<void> => {
-  const userId = req.session?.userId;
+  const userId = req.userId;
   if (!userId) {
     res.status(401).json({ message: 'Not logged in' });
     return;
@@ -111,8 +113,7 @@ authRouter.get('/me', async (req: Request, res: Response): Promise<void> => {
   const { findUserById } = await import('../lib/users.js');
   const user = await findUserById(userId);
   if (!user) {
-    req.session?.destroy(() => {});
-    res.status(401).json({ message: 'Session invalid' });
+    res.status(401).json({ message: 'Token invalid' });
     return;
   }
   res.json({

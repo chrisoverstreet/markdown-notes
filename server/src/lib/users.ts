@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs';
-import { sql } from './db.js';
+import { eq } from 'drizzle-orm';
+import { db } from './db.js';
+import { users } from '../db/schema.js';
 
 const SALT_ROUNDS = 10;
 
@@ -12,14 +14,15 @@ export interface UserRow {
   created_at: Date;
 }
 
-export async function findUserByUsername(username: string): Promise<UserRow | null> {
-  const rows = await sql`
-    SELECT id, username, password_hash, kek_salt, encrypted_dek, created_at
-    FROM users
-    WHERE username = ${username}
-    LIMIT 1
-  `;
-  return (rows as UserRow[])[0] ?? null;
+function toUserRow(row: typeof users.$inferSelect): UserRow {
+  return {
+    id: row.id,
+    username: row.username,
+    password_hash: row.passwordHash,
+    kek_salt: row.kekSalt,
+    encrypted_dek: row.encryptedDek,
+    created_at: row.createdAt,
+  };
 }
 
 export interface UserMeRow {
@@ -29,14 +32,26 @@ export interface UserMeRow {
   encrypted_dek: string | null;
 }
 
+export async function findUserByUsername(username: string): Promise<UserRow | null> {
+  const rows = await db.select().from(users).where(eq(users.username, username)).limit(1);
+  const row = rows[0];
+  return row ? toUserRow(row) : null;
+}
+
 export async function findUserById(id: string): Promise<UserMeRow | null> {
-  const rows = await sql`
-    SELECT id, username, kek_salt, encrypted_dek
-    FROM users
-    WHERE id = ${id}
-    LIMIT 1
-  `;
-  return (rows as UserMeRow[])[0] ?? null;
+  const rows = await db
+    .select({ id: users.id, username: users.username, kekSalt: users.kekSalt, encryptedDek: users.encryptedDek })
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    username: row.username,
+    kek_salt: row.kekSalt,
+    encrypted_dek: row.encryptedDek,
+  };
 }
 
 export async function createUser(
@@ -45,14 +60,18 @@ export async function createUser(
   e2ee: { kek_salt: string; encrypted_dek: string }
 ): Promise<UserRow> {
   const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
-  const rows = await sql`
-    INSERT INTO users (username, password_hash, kek_salt, encrypted_dek)
-    VALUES (${username}, ${password_hash}, ${e2ee.kek_salt}, ${e2ee.encrypted_dek})
-    RETURNING id, username, password_hash, kek_salt, encrypted_dek, created_at
-  `;
-  const row = (rows as UserRow[])[0];
+  const inserted = await db
+    .insert(users)
+    .values({
+      username,
+      passwordHash: password_hash,
+      kekSalt: e2ee.kek_salt,
+      encryptedDek: e2ee.encrypted_dek,
+    })
+    .returning();
+  const row = inserted[0];
   if (!row) throw new Error('Insert failed');
-  return row;
+  return toUserRow(row);
 }
 
 export async function updateUserE2EE(
@@ -60,10 +79,10 @@ export async function updateUserE2EE(
   kek_salt: string,
   encrypted_dek: string
 ): Promise<void> {
-  await sql`
-    UPDATE users SET kek_salt = ${kek_salt}, encrypted_dek = ${encrypted_dek}
-    WHERE id = ${userId}
-  `;
+  await db
+    .update(users)
+    .set({ kekSalt: kek_salt, encryptedDek: encrypted_dek })
+    .where(eq(users.id, userId));
 }
 
 export function verifyPassword(password: string, hash: string): Promise<boolean> {

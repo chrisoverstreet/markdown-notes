@@ -13,6 +13,8 @@ import {
   unwrapDEK,
 } from './e2ee';
 
+const AUTH_TOKEN_KEY = 'markdown-notes-token';
+
 export interface User {
   id: string;
   username: string;
@@ -23,6 +25,7 @@ interface AuthContextValue {
   loading: boolean;
   dek: CryptoKey | null;
   needsUnlock: boolean;
+  getAuthHeaders: () => Record<string, string>;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
@@ -32,6 +35,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY));
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [dek, setDek] = useState<CryptoKey | null>(null);
@@ -40,9 +44,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const needsUnlock = Boolean(user && kekSalt && encryptedDek && !dek);
 
+  const getAuthHeaders = useCallback((): Record<string, string> => {
+    const t = token ?? localStorage.getItem(AUTH_TOKEN_KEY);
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  }, [token]);
+
   const checkAuth = useCallback(async () => {
     try {
-      const res = await fetch('/api/auth/me', { credentials: 'include' });
+      const res = await fetch('/api/auth/me', {
+        credentials: 'include',
+        headers: getAuthHeaders(),
+      });
       if (res.ok) {
         const data = (await res.json()) as User & {
           kek_salt?: string | null;
@@ -54,19 +66,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setDek(null);
       } else {
         setUser(null);
+        setToken(null);
+        localStorage.removeItem(AUTH_TOKEN_KEY);
         setKekSalt(null);
         setEncryptedDek(null);
         setDek(null);
       }
     } catch {
       setUser(null);
+      setToken(null);
+      localStorage.removeItem(AUTH_TOKEN_KEY);
       setKekSalt(null);
       setEncryptedDek(null);
       setDek(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     checkAuth();
@@ -85,9 +101,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(err.message ?? 'Login failed');
       }
       const data = (await res.json()) as User & {
+        token?: string;
         kek_salt?: string | null;
         encrypted_dek?: string | null;
       };
+      if (data.token) {
+        setToken(data.token);
+        localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+      }
       setUser({ id: data.id, username: data.username });
       setKekSalt(data.kek_salt ?? null);
       setEncryptedDek(data.encrypted_dek ?? null);
@@ -98,9 +119,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const salt = await generateSalt();
         const newDek = await generateDEK();
         const wrapped = await wrapDEK(newDek, password, salt);
+        const authHeader = data.token ? { Authorization: `Bearer ${data.token}` } : {};
         const setupRes = await fetch('/api/auth/setup-e2ee', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeader },
           credentials: 'include',
           body: JSON.stringify({ kek_salt: salt, encrypted_dek: wrapped }),
         });
@@ -116,6 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     setUser(null);
+    setToken(null);
+    localStorage.removeItem(AUTH_TOKEN_KEY);
     setDek(null);
     setKekSalt(null);
     setEncryptedDek(null);
@@ -142,9 +166,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(err.message ?? 'Registration failed');
       }
       const data = (await res.json()) as User & {
+        token?: string;
         kek_salt?: string | null;
         encrypted_dek?: string | null;
       };
+      if (data.token) {
+        setToken(data.token);
+        localStorage.setItem(AUTH_TOKEN_KEY, data.token);
+      }
       setUser({ id: data.id, username: data.username });
       setKekSalt(data.kek_salt ?? null);
       setEncryptedDek(data.encrypted_dek ?? null);
@@ -169,6 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         dek,
         needsUnlock,
+        getAuthHeaders,
         login,
         logout,
         register,

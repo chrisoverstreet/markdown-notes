@@ -10,14 +10,14 @@ export interface NoteSummary {
 }
 
 export default function NotesList() {
-  const { dek } = useAuth();
+  const { dek, getAuthHeaders } = useAuth();
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!dek) return;
-    fetch('/api/notes', { credentials: 'include' })
+    fetch('/api/notes', { credentials: 'include', headers: getAuthHeaders() })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load notes');
         return res.json();
@@ -33,7 +33,7 @@ export default function NotesList() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Error'))
       .finally(() => setLoading(false));
-  }, [dek]);
+  }, [dek, getAuthHeaders]);
 
   const createNote = async () => {
     if (!dek) return;
@@ -41,7 +41,7 @@ export default function NotesList() {
     const encryptedContent = await encryptWithDEK(dek, '');
     const res = await fetch('/api/notes', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       credentials: 'include',
       body: JSON.stringify({ title: encryptedTitle, content_markdown: encryptedContent }),
     });
