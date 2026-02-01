@@ -1,13 +1,28 @@
 import type { Request, Response } from 'express';
 import { Router } from 'express';
-import { findUserByUsername, createUser, verifyPassword } from '../lib/users.js';
+import {
+  findUserByUsername,
+  createUser,
+  verifyPassword,
+  updateUserE2EE,
+} from '../lib/users.js';
 
 export const authRouter: ReturnType<typeof Router> = Router();
 
 authRouter.post('/register', async (req: Request, res: Response): Promise<void> => {
-  const { username, password } = req.body as { username?: string; password?: string };
+  const body = req.body as {
+    username?: string;
+    password?: string;
+    kek_salt?: string;
+    encrypted_dek?: string;
+  };
+  const { username, password, kek_salt, encrypted_dek } = body;
   if (!username || typeof username !== 'string' || !password || typeof password !== 'string') {
     res.status(400).json({ message: 'Username and password required' });
+    return;
+  }
+  if (!kek_salt || typeof kek_salt !== 'string' || !encrypted_dek || typeof encrypted_dek !== 'string') {
+    res.status(400).json({ message: 'E2EE keys required (kek_salt, encrypted_dek)' });
     return;
   }
   const trimmed = username.trim();
@@ -25,9 +40,14 @@ authRouter.post('/register', async (req: Request, res: Response): Promise<void> 
     return;
   }
   try {
-    const user = await createUser(trimmed, password);
+    const user = await createUser(trimmed, password, { kek_salt, encrypted_dek });
     req.session!.userId = user.id;
-    res.status(201).json({ id: user.id, username: user.username });
+    res.status(201).json({
+      id: user.id,
+      username: user.username,
+      kek_salt: user.kek_salt,
+      encrypted_dek: user.encrypted_dek,
+    });
   } catch {
     res.status(500).json({ message: 'Registration failed' });
   }
@@ -50,7 +70,31 @@ authRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
     return;
   }
   req.session!.userId = user.id;
-  res.json({ id: user.id, username: user.username });
+  res.json({
+    id: user.id,
+    username: user.username,
+    kek_salt: user.kek_salt,
+    encrypted_dek: user.encrypted_dek,
+  });
+});
+
+authRouter.post('/setup-e2ee', async (req: Request, res: Response): Promise<void> => {
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ message: 'Not logged in' });
+    return;
+  }
+  const { kek_salt, encrypted_dek } = req.body as { kek_salt?: string; encrypted_dek?: string };
+  if (!kek_salt || typeof kek_salt !== 'string' || !encrypted_dek || typeof encrypted_dek !== 'string') {
+    res.status(400).json({ message: 'kek_salt and encrypted_dek required' });
+    return;
+  }
+  try {
+    await updateUserE2EE(userId, kek_salt, encrypted_dek);
+    res.json({ kek_salt, encrypted_dek });
+  } catch {
+    res.status(500).json({ message: 'Setup failed' });
+  }
 });
 
 authRouter.post('/logout', (req: Request, res: Response): void => {
@@ -71,5 +115,10 @@ authRouter.get('/me', async (req: Request, res: Response): Promise<void> => {
     res.status(401).json({ message: 'Session invalid' });
     return;
   }
-  res.json({ id: user.id, username: user.username });
+  res.json({
+    id: user.id,
+    username: user.username,
+    kek_salt: user.kek_salt,
+    encrypted_dek: user.encrypted_dek,
+  });
 });

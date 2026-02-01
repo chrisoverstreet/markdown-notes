@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../lib/auth';
+import { encryptWithDEK, decryptWithDEK } from '../lib/e2ee';
 
 export interface NoteSummary {
   id: string;
@@ -8,27 +10,40 @@ export interface NoteSummary {
 }
 
 export default function NotesList() {
+  const { dek } = useAuth();
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!dek) return;
     fetch('/api/notes', { credentials: 'include' })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load notes');
         return res.json();
       })
-      .then((data: NoteSummary[]) => setNotes(data))
+      .then(async (data: NoteSummary[]) => {
+        const decrypted = await Promise.all(
+          data.map(async (n) => ({
+            ...n,
+            title: await decryptWithDEK(dek, n.title),
+          }))
+        );
+        setNotes(decrypted);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : 'Error'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [dek]);
 
   const createNote = async () => {
+    if (!dek) return;
+    const encryptedTitle = await encryptWithDEK(dek, 'Untitled');
+    const encryptedContent = await encryptWithDEK(dek, '');
     const res = await fetch('/api/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ title: 'Untitled', content_markdown: '' }),
+      body: JSON.stringify({ title: encryptedTitle, content_markdown: encryptedContent }),
     });
     if (!res.ok) return;
     const note = (await res.json()) as NoteSummary & { content_markdown?: string };

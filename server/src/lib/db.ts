@@ -17,6 +17,18 @@ export async function initDb(): Promise<void> {
     )
   `;
   await sql`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'kek_salt')
+      THEN ALTER TABLE users ADD COLUMN kek_salt TEXT; END IF;
+    END $$
+  `;
+  await sql`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'encrypted_dek')
+      THEN ALTER TABLE users ADD COLUMN encrypted_dek TEXT; END IF;
+    END $$
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS notes (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

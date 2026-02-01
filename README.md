@@ -8,6 +8,7 @@ A minimalistic web app for recording notes in markdown. Built with TypeScript, R
 - **Backend:** Express (Node.js), TypeScript
 - **Database:** Neon (serverless Postgres)
 - **Auth:** Username/password with session cookies (bcrypt)
+- **Privacy:** End-to-end encryption (E2EE): note data is encrypted in the browser with a key derived from the user’s password. The server only stores ciphertext; developers and the server cannot decrypt user data.
 - **Env:** Doppler (no `.env` files in repo)
 
 ## Prerequisites
@@ -22,13 +23,16 @@ A minimalistic web app for recording notes in markdown. Built with TypeScript, R
 2. Create a Doppler project (or use an existing one) and link this repo: `doppler setup`
 3. In your Doppler config, add these variables:
 
-| Variable         | Description                        |
-| ---------------- | ---------------------------------- |
-| `DATABASE_URL`   | Neon Postgres connection string    |
-| `PORT`           | Server port (default 3000)         |
-| `SESSION_SECRET` | Secret for signing session cookies |
+| Variable         | Description                                                                 |
+| ---------------- | --------------------------------------------------------------------------- |
+| `DATABASE_URL`   | Neon Postgres connection string                                             |
+| `PORT`           | Server port (default 3000)                                                  |
+| `SESSION_SECRET` | Secret for signing session cookies                                          |
+| `ENCRYPTION_KEY` | Optional; only needed to decrypt legacy server-encrypted notes (see below)  |
 
 Do not commit `.env` or `.env.local`; all secrets live in Doppler.
+
+**E2EE:** New notes are encrypted in the browser; the server never sees the decryption key. After a page refresh, users must enter their password again to unlock notes (the key is not stored). Set `ENCRYPTION_KEY` only if you have existing notes that were encrypted with the previous server-side scheme and you need to read them.
 
 ## Local development
 
@@ -62,7 +66,7 @@ Set `NODE_ENV=production` in production. The server serves the built Vite app fr
 1. Connect your repo to Render or Railway.
 2. **Build:** `pnpm install && pnpm build`
 3. **Start:** `doppler run -- pnpm start` (or use the platform’s Doppler integration to inject env; then use `pnpm start`).
-4. Ensure `DATABASE_URL`, `PORT`, and `SESSION_SECRET` are set in the host (or via Doppler).
+4. Ensure `DATABASE_URL`, `PORT`, and `SESSION_SECRET` are set in the host (or via Doppler). `ENCRYPTION_KEY` is optional (see E2EE note above).
 
 ## Scripts
 

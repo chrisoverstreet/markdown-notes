@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import { useAuth } from '../lib/auth';
+import { encryptWithDEK, decryptWithDEK } from '../lib/e2ee';
 
 export type MarkdownViewMode = 'plain' | 'formatted' | 'both';
 
@@ -15,6 +17,7 @@ export interface Note {
 export default function NoteDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { dek } = useAuth();
   const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(true);
@@ -24,34 +27,49 @@ export default function NoteDetail() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !dek) return;
     fetch(`/api/notes/${id}`, { credentials: 'include' })
       .then((res) => {
         if (!res.ok) throw new Error('Note not found');
         return res.json();
       })
-      .then((data: Note) => {
-        setNote(data);
-        setTitle(data.title);
-        setContent(data.content_markdown);
+      .then(async (data: Note) => ({
+        ...data,
+        title: await decryptWithDEK(dek, data.title),
+        content_markdown: await decryptWithDEK(dek, data.content_markdown),
+      }))
+      .then((decrypted) => {
+        setNote(decrypted);
+        setTitle(decrypted.title);
+        setContent(decrypted.content_markdown);
       })
       .catch(() => navigate('/'))
       .finally(() => setLoading(false));
-  }, [id, navigate]);
+  }, [id, dek, navigate]);
 
   const save = async () => {
-    if (!id) return;
+    if (!id || !dek) return;
     setSaving(true);
     try {
+      const encryptedTitle = await encryptWithDEK(dek, title);
+      const encryptedContent = await encryptWithDEK(dek, content);
       const res = await fetch(`/api/notes/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ title, content_markdown: content }),
+        body: JSON.stringify({
+          title: encryptedTitle,
+          content_markdown: encryptedContent,
+        }),
       });
       if (res.ok) {
         const updated = (await res.json()) as Note;
-        setNote(updated);
+        const decrypted = {
+          ...updated,
+          title: await decryptWithDEK(dek, updated.title),
+          content_markdown: await decryptWithDEK(dek, updated.content_markdown),
+        };
+        setNote(decrypted);
         setEditing(false);
       }
     } finally {
