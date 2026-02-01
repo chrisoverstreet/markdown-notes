@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useAuth } from '../lib/auth';
 import { encryptWithDEK, decryptWithDEK } from '../lib/e2ee';
 
@@ -122,7 +123,41 @@ export default function NoteDetail() {
         {showPlain ? 'Formatted' : null}
       </div>
       <div className="flex-1 p-3 sm:p-4 border border-gray-200 rounded bg-white min-h-[200px] md:min-h-[280px] overflow-auto prose prose-sm max-w-none dark:bg-gray-800 dark:border-gray-600 dark:prose-invert prose-headings:dark:text-gray-100 prose-p:dark:text-gray-200 prose-code:dark:text-gray-200 prose-pre:dark:bg-gray-900 prose-pre:dark:text-gray-200 prose-a:dark:text-gray-300 prose-strong:dark:text-gray-100">
-        <ReactMarkdown>{content || '*No content*'}</ReactMarkdown>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            table: ({ children }) => (
+              <div className="my-4 overflow-x-auto">
+                <table className="w-full min-w-full border-collapse">{children}</table>
+              </div>
+            ),
+            thead: ({ children }) => (
+              <thead className="bg-gray-100 dark:bg-gray-700/60">{children}</thead>
+            ),
+            tbody: ({ children }) => <tbody>{children}</tbody>,
+            tr: ({ children }) => <tr>{children}</tr>,
+            th: ({ children, align, ...props }) => (
+              <th
+                align={align}
+                className="border border-gray-200 px-3 py-2 text-sm font-semibold dark:border-gray-600 dark:text-gray-100"
+                {...props}
+              >
+                {children}
+              </th>
+            ),
+            td: ({ children, align, ...props }) => (
+              <td
+                align={align}
+                className="border border-gray-200 px-3 py-2 text-sm dark:border-gray-600 dark:text-gray-200"
+                {...props}
+              >
+                {children}
+              </td>
+            ),
+          }}
+        >
+          {content || '*No content*'}
+        </ReactMarkdown>
       </div>
     </div>
   );
