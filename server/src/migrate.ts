@@ -1,3 +1,8 @@
+import dotenv from 'dotenv';
+
+dotenv.config();
+dotenv.config({ path: '.env.local', override: true });
+
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { neon } from '@neondatabase/serverless';

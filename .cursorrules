@@ -2,7 +2,7 @@
 
 - **Stack:** TypeScript only; pnpm for package management; Tailwind CSS for styling; Prettier + ESLint (no conflicting formatters).
 - **Database:** Neon (serverless Postgres). Use `@neondatabase/serverless` or a TypeScript ORM (e.g. Drizzle) compatible with Neon.
-- **Environment:** All environment variables are managed with Doppler. Use `doppler run -- <command>` for any script that needs env. Do not add `.env` or `.env.local` to the repo; document Doppler in README.
+- **Environment:** Environment variables are loaded from `.env` or `.env.local`. Do not commit these files; use `.env.example` (or `.env.local.example`) as a template. Document in README.
 - **No Vercel/Next.js:** Frontend is Vite + React; backend is Express. Do not use Next.js or Vercel.
 - **Style:** Minimalistic UI—clean layout, limited palette; Tailwind utility classes only.
 - **Conventions:** Functional components; clear separation between client (Vite/React) and server (Express); keep components small.

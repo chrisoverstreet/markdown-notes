@@ -1,5 +1,4 @@
 import { and, desc, eq } from 'drizzle-orm';
-import { decryptLegacyIfPossible } from './crypto.js';
 import { db } from './db.js';
 import { notes as notesTable } from '../db/schema.js';
 
@@ -23,22 +22,13 @@ function toNoteRow(row: typeof notesTable.$inferSelect): NoteRow {
   };
 }
 
-/** Decrypt only legacy server-encrypted ("enc:") fields; E2EE and plaintext pass through. */
-function decryptLegacyNote(row: NoteRow): NoteRow {
-  return {
-    ...row,
-    title: decryptLegacyIfPossible(row.title),
-    content_markdown: decryptLegacyIfPossible(row.content_markdown),
-  };
-}
-
 export async function getNotesByUserId(userId: string): Promise<NoteRow[]> {
   const rows = await db
     .select()
     .from(notesTable)
     .where(eq(notesTable.userId, userId))
     .orderBy(desc(notesTable.updatedAt));
-  return rows.map(toNoteRow).map(decryptLegacyNote);
+  return rows.map(toNoteRow);
 }
 
 export async function getNoteById(id: string, userId: string): Promise<NoteRow | null> {
@@ -48,7 +38,7 @@ export async function getNoteById(id: string, userId: string): Promise<NoteRow |
     .where(and(eq(notesTable.id, id), eq(notesTable.userId, userId)))
     .limit(1);
   const row = rows[0];
-  return row ? decryptLegacyNote(toNoteRow(row)) : null;
+  return row ? toNoteRow(row) : null;
 }
 
 export async function createNote(
@@ -66,7 +56,7 @@ export async function createNote(
     .returning();
   const row = inserted[0];
   if (!row) throw new Error('Insert failed');
-  return decryptLegacyNote(toNoteRow(row));
+  return toNoteRow(row);
 }
 
 export async function updateNote(
@@ -85,7 +75,7 @@ export async function updateNote(
       .where(and(eq(notesTable.id, id), eq(notesTable.userId, userId)))
       .returning();
     const row = updated[0];
-    return row ? decryptLegacyNote(toNoteRow(row)) : null;
+    return row ? toNoteRow(row) : null;
   }
   if (data.title !== undefined) {
     const updated = await db
@@ -94,7 +84,7 @@ export async function updateNote(
       .where(and(eq(notesTable.id, id), eq(notesTable.userId, userId)))
       .returning();
     const row = updated[0];
-    return row ? decryptLegacyNote(toNoteRow(row)) : null;
+    return row ? toNoteRow(row) : null;
   }
   if (data.content_markdown !== undefined) {
     const updated = await db
@@ -103,7 +93,7 @@ export async function updateNote(
       .where(and(eq(notesTable.id, id), eq(notesTable.userId, userId)))
       .returning();
     const row = updated[0];
-    return row ? decryptLegacyNote(toNoteRow(row)) : null;
+    return row ? toNoteRow(row) : null;
   }
   return getNoteById(id, userId);
 }

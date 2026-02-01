@@ -1,6 +1,6 @@
 # Markdown Notes
 
-A minimalistic web app for recording notes in markdown. Built with TypeScript, React (Vite), Express, Neon Postgres, and Tailwind CSS. Environment variables are managed with [Doppler](https://www.doppler.com/).
+A minimalistic web app for recording notes in markdown. Built with TypeScript, React (Vite), Express, Neon Postgres, and Tailwind CSS. Environment variables are loaded from `.env` or `.env.local`. Do not commit these files; use `.env.example` (or `.env.local.example`) as a template.
 
 ## Stack
 
@@ -9,40 +9,36 @@ A minimalistic web app for recording notes in markdown. Built with TypeScript, R
 - **Database:** Neon (serverless Postgres), schema and migrations via [Drizzle ORM](https://orm.drizzle.team/)
 - **Auth:** Username/password with JWTs (bcrypt)
 - **Privacy:** End-to-end encryption (E2EE): note data is encrypted in the browser with a key derived from the user’s password. The server only stores ciphertext; developers and the server cannot decrypt user data.
-- **Env:** Doppler (no `.env` files in repo)
+- **Env:** `.env` / `.env.local` (do not commit; use `.env.example` as a template)
 
 ## Prerequisites
 
 - Node.js 18+
 - pnpm
-- [Doppler CLI](https://docs.doppler.com/docs/install-cli) (for local env)
 
-## Doppler setup
+## Environment setup
 
-1. Install the Doppler CLI and log in: `doppler login`
-2. Create a Doppler project (or use an existing one) and link this repo: `doppler setup`
-3. In your Doppler config, add these variables:
+1. Copy `.env.example` to `.env` (or `.env.local`): `cp .env.example .env`
+2. Edit `.env` and set:
 
-| Variable         | Description                                                                 |
-| ---------------- | --------------------------------------------------------------------------- |
-| `DATABASE_URL`   | Neon Postgres connection string                                             |
-| `PORT`           | Server port (default 3000)                                                  |
-| `JWT_SECRET`     | Secret for signing JWTs                                                     |
+| Variable       | Description                     |
+| -------------- | ------------------------------- |
+| `DATABASE_URL` | Neon Postgres connection string |
+| `PORT`         | Server port (default 3000)      |
+| `JWT_SECRET`   | Secret for signing JWTs         |
 
-Do not commit `.env` or `.env.local`; all secrets live in Doppler.
+Do not commit `.env` or `.env.local`; they are listed in `.gitignore`.
 
-**E2EE:** New notes are encrypted in the browser; the server never sees the decryption key. After a page refresh, users must enter their password again to unlock notes (the key is not stored). Set `ENCRYPTION_KEY` only if you have existing notes that were encrypted with the previous server-side scheme and you need to read them.
+**E2EE:** New notes are encrypted in the browser; the server never sees the decryption key. After a page refresh, users must enter their password again to unlock notes (the key is not stored).
 
 ## Local development
-
-Run all commands that need env through Doppler:
 
 ```bash
 # Install dependencies
 pnpm install
 
 # Run client (Vite) and server (Express) in parallel
-doppler run -- pnpm dev
+pnpm dev
 ```
 
 - Client: http://localhost:5173 (Vite dev server, proxies `/api` to the server)
@@ -52,10 +48,10 @@ doppler run -- pnpm dev
 
 ```bash
 # Run migrations, then build client and server (migrations run automatically during build)
-doppler run -- pnpm build
+pnpm build
 
 # Run production server (serves API + static client from dist)
-doppler run -- pnpm start
+pnpm start
 ```
 
 Set `NODE_ENV=production` in production. The server serves the built Vite app from `dist/` and mounts the API at `/api`.
@@ -64,19 +60,18 @@ Set `NODE_ENV=production` in production. The server serves the built Vite app fr
 
 1. Connect your repo to Render or Railway.
 2. **Build:** `pnpm install && pnpm build`
-3. **Start:** `doppler run -- pnpm start` (or use the platform’s Doppler integration to inject env; then use `pnpm start`).
-4. Ensure `DATABASE_URL`, `PORT`, and `JWT_SECRET` are set in the host (or via Doppler). `ENCRYPTION_KEY` is optional (see E2EE note above).
+3. **Start:** `pnpm start` — Configure `DATABASE_URL`, `PORT`, and `JWT_SECRET` in the host's environment (dashboard or env vars).
 
 ## Scripts
 
 | Script              | Description                              |
 | ------------------- | ---------------------------------------- |
-| `pnpm dev`          | Client + server (use with Doppler)       |
-| `pnpm build`        | Run migrations, then build client + server (use with Doppler) |
-| `pnpm start`        | Run production server (use with Doppler) |
-| `pnpm db:generate`  | Generate a new migration from schema (use with Doppler) |
-| `pnpm db:migrate`   | Run pending migrations (use with Doppler) |
-| `pnpm db:studio`    | Open Drizzle Studio (use with Doppler)   |
+| `pnpm dev`          | Client + server                          |
+| `pnpm build`        | Run migrations, then build client + server |
+| `pnpm start`        | Run production server                    |
+| `pnpm db:generate`  | Generate a new migration from schema     |
+| `pnpm db:migrate`   | Run pending migrations                   |
+| `pnpm db:studio`    | Open Drizzle Studio                      |
 | `pnpm lint`         | Run ESLint                               |
 | `pnpm format`       | Format with Prettier                     |
 | `pnpm format:check` | Check Prettier                           |
