@@ -58,6 +58,46 @@ export default function NoteDetail() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
+  const contentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const handleContentKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key !== 'Enter' || !e.shiftKey) return;
+      const textarea = e.currentTarget;
+      const value = content;
+      const start = textarea.selectionStart;
+      const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+      const lineEndIdx = value.indexOf('\n', start);
+      const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx;
+
+      if (e.metaKey) {
+        // Cmd+Shift+Enter: new line before current, cursor there
+        e.preventDefault();
+        const before = value.slice(0, lineStart);
+        const after = value.slice(lineStart);
+        const newContent = before + '\n' + after;
+        const newCursor = before.length + 1;
+        setContent(newContent);
+        setTimeout(() => {
+          contentTextareaRef.current?.focus();
+          contentTextareaRef.current?.setSelectionRange(newCursor, newCursor);
+        }, 0);
+      } else {
+        // Shift+Enter: new line below current, cursor there
+        e.preventDefault();
+        const before = value.slice(0, lineEnd);
+        const after = value.slice(lineEnd);
+        const newContent = before + '\n' + after;
+        const newCursor = before.length + 1;
+        setContent(newContent);
+        setTimeout(() => {
+          contentTextareaRef.current?.focus();
+          contentTextareaRef.current?.setSelectionRange(newCursor, newCursor);
+        }, 0);
+      }
+    },
+    [content]
+  );
 
   useEffect(() => {
     if (!id || !dek) return;
@@ -113,7 +153,7 @@ export default function NoteDetail() {
   );
 
   // Auto-save: debounced save when title or content change (stay in editing mode)
-  const autoSaveDelayMs = 1500;
+  const autoSaveDelayMs = 15000;
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -162,14 +202,22 @@ export default function NoteDetail() {
       </div>
       {editing ? (
         <textarea
+          ref={contentTextareaRef}
           value={content}
           onChange={(e) => setContent(e.target.value)}
+          onKeyDown={handleContentKeyDown}
           onBlur={() => save(true)}
           className="w-full flex-1 min-h-[200px] md:min-h-[280px] p-3 sm:p-4 border border-gray-200 rounded font-mono text-sm resize-y dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-500"
           placeholder="Write markdown here..."
         />
       ) : (
-        <pre className="flex-1 p-3 sm:p-4 border border-gray-200 rounded bg-white font-mono text-sm whitespace-pre-wrap overflow-auto min-h-[200px] md:min-h-[280px] dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200">
+        <pre
+          role="button"
+          tabIndex={0}
+          onClick={() => setEditing(true)}
+          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setEditing(true))}
+          className="flex-1 p-3 sm:p-4 border border-gray-200 rounded bg-white font-mono text-sm whitespace-pre-wrap overflow-auto min-h-[200px] md:min-h-[280px] cursor-text dark:bg-gray-800 dark:border-gray-600 dark:text-gray-200"
+        >
           {content || ''}
         </pre>
       )}
@@ -230,14 +278,22 @@ export default function NoteDetail() {
         ← Notes
       </Link>
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => save(true)}
-          disabled={!editing}
-          className="flex-1 min-w-0 text-base sm:text-lg font-medium border-0 border-b border-transparent focus:border-gray-300 focus:outline-none bg-transparent py-2 sm:py-1 dark:text-gray-100 dark:focus:border-gray-500 dark:border-gray-800"
-        />
+        <div
+          className={`flex-1 min-w-0 ${!editing ? 'cursor-text' : ''}`}
+          onClick={() => !editing && setEditing(true)}
+          role="button"
+          tabIndex={!editing ? 0 : undefined}
+          onKeyDown={(e) => !editing && (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setEditing(true))}
+        >
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => save(true)}
+            disabled={!editing}
+            className="w-full text-base sm:text-lg font-medium border-0 border-b border-transparent focus:border-gray-300 focus:outline-none bg-transparent py-2 sm:py-1 dark:text-gray-100 dark:focus:border-gray-500 dark:border-gray-800"
+          />
+        </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
