@@ -152,7 +152,7 @@ export default function NoteDetail() {
     [id, dek, title, content, authFetch]
   );
 
-  // Auto-save: debounced save when title or content change (stay in editing mode)
+  // Auto-save: debounced save when title or content change; timer resets on every keystroke
   const autoSaveDelayMs = 15000;
   const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -161,6 +161,12 @@ export default function NoteDetail() {
     const hasChanges =
       title !== note.title || content !== note.content_markdown;
     if (!hasChanges) return;
+
+    // Reset timer: clear any pending auto-save so we only save after user stops typing
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+      autoSaveTimeoutRef.current = null;
+    }
 
     autoSaveTimeoutRef.current = setTimeout(() => {
       save(false);
