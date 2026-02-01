@@ -10,14 +10,14 @@ export interface NoteSummary {
 }
 
 export default function NotesList() {
-  const { dek, getAuthHeaders } = useAuth();
+  const { dek, authFetch } = useAuth();
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!dek) return;
-    fetch('/api/notes', { credentials: 'include', headers: getAuthHeaders() })
+    authFetch('/api/notes')
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load notes');
         return res.json();
@@ -33,16 +33,15 @@ export default function NotesList() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Error'))
       .finally(() => setLoading(false));
-  }, [dek, getAuthHeaders]);
+  }, [dek, authFetch]);
 
   const createNote = async () => {
     if (!dek) return;
     const encryptedTitle = await encryptWithDEK(dek, 'Untitled');
     const encryptedContent = await encryptWithDEK(dek, '');
-    const res = await fetch('/api/notes', {
+    const res = await authFetch('/api/notes', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: encryptedTitle, content_markdown: encryptedContent }),
     });
     if (!res.ok) return;

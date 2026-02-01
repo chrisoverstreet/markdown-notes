@@ -4,6 +4,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
 } from 'react';
 import {
@@ -14,6 +15,8 @@ import {
 } from './e2ee';
 
 const AUTH_TOKEN_KEY = 'markdown-notes-token';
+const RENEWED_TOKEN_HEADER = 'X-Renewed-Token';
+const INACTIVITY_MS = 60 * 60 * 1000; // 1 hour
 
 export interface User {
   id: string;
@@ -26,6 +29,7 @@ interface AuthContextValue {
   dek: CryptoKey | null;
   needsUnlock: boolean;
   getAuthHeaders: () => Record<string, string>;
+  authFetch: (url: string, options?: RequestInit) => Promise<Response>;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
@@ -41,6 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [dek, setDek] = useState<CryptoKey | null>(null);
   const [kekSalt, setKekSalt] = useState<string | null>(null);
   const [encryptedDek, setEncryptedDek] = useState<string | null>(null);
+  const inactivityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const needsUnlock = Boolean(user && kekSalt && encryptedDek && !dek);
 
@@ -49,12 +54,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return t ? { Authorization: `Bearer ${t}` } : {};
   }, [token]);
 
+  const clearInactivityTimer = useCallback(() => {
+    if (inactivityTimeoutRef.current) {
+      clearTimeout(inactivityTimeoutRef.current);
+      inactivityTimeoutRef.current = null;
+    }
+  }, []);
+
+  const resetInactivityTimer = useCallback(() => {
+    clearInactivityTimer();
+    inactivityTimeoutRef.current = setTimeout(() => {
+      setDek(null);
+      inactivityTimeoutRef.current = null;
+    }, INACTIVITY_MS);
+  }, [clearInactivityTimer]);
+
   const checkAuth = useCallback(async () => {
     try {
       const res = await fetch('/api/auth/me', {
         credentials: 'include',
         headers: getAuthHeaders(),
       });
+      const renewed = res.headers.get(RENEWED_TOKEN_HEADER);
+      if (renewed) {
+        setToken(renewed);
+        localStorage.setItem(AUTH_TOKEN_KEY, renewed);
+      }
       if (res.ok) {
         const data = (await res.json()) as User & {
           kek_salt?: string | null;
@@ -63,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser({ id: data.id, username: data.username });
         setKekSalt(data.kek_salt ?? null);
         setEncryptedDek(data.encrypted_dek ?? null);
-        setDek(null);
+        // Preserve DEK on re-validation so user doesn't have to unlock within session
       } else {
         setUser(null);
         setToken(null);
@@ -79,14 +104,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setKekSalt(null);
       setEncryptedDek(null);
       setDek(null);
+      clearInactivityTimer();
     } finally {
       setLoading(false);
     }
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders, clearInactivityTimer]);
 
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  const authFetch = useCallback(
+    async (url: string, options: RequestInit = {}) => {
+      const headers = { ...options.headers, ...getAuthHeaders() } as HeadersInit;
+      const res = await fetch(url, { ...options, credentials: 'include', headers });
+      const renewed = res.headers.get(RENEWED_TOKEN_HEADER);
+      if (renewed) {
+        setToken(renewed);
+        localStorage.setItem(AUTH_TOKEN_KEY, renewed);
+      }
+      if (dek) resetInactivityTimer();
+      return res;
+    },
+    [getAuthHeaders, dek, resetInactivityTimer]
+  );
+
+  useEffect(() => {
+    if (!dek) return;
+    resetInactivityTimer();
+    const onActivity = () => resetInactivityTimer();
+    window.addEventListener('click', onActivity);
+    window.addEventListener('keydown', onActivity);
+    window.addEventListener('mousemove', onActivity);
+    return () => {
+      window.removeEventListener('click', onActivity);
+      window.removeEventListener('keydown', onActivity);
+      window.removeEventListener('mousemove', onActivity);
+      clearInactivityTimer();
+    };
+  }, [dek, resetInactivityTimer, clearInactivityTimer]);
 
   const login = useCallback(
     async (username: string, password: string) => {
@@ -115,6 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.kek_salt && data.encrypted_dek) {
         const key = await unwrapDEK(data.encrypted_dek, password, data.kek_salt);
         setDek(key);
+        resetInactivityTimer();
       } else {
         const salt = await generateSalt();
         const newDek = await generateDEK();
@@ -130,20 +187,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setKekSalt(salt);
         setEncryptedDek(wrapped);
         setDek(newDek);
+        resetInactivityTimer();
       }
     },
-    []
+    [resetInactivityTimer]
   );
 
   const logout = useCallback(async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    clearInactivityTimer();
     setUser(null);
     setToken(null);
     localStorage.removeItem(AUTH_TOKEN_KEY);
     setDek(null);
     setKekSalt(null);
     setEncryptedDek(null);
-  }, []);
+  }, [clearInactivityTimer]);
 
   const register = useCallback(
     async (username: string, password: string) => {
@@ -178,8 +237,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setKekSalt(data.kek_salt ?? null);
       setEncryptedDek(data.encrypted_dek ?? null);
       setDek(newDek);
+      resetInactivityTimer();
     },
-    []
+    [resetInactivityTimer]
   );
 
   const unlock = useCallback(
@@ -187,8 +247,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!kekSalt || !encryptedDek) throw new Error('Nothing to unlock');
       const key = await unwrapDEK(encryptedDek, password, kekSalt);
       setDek(key);
+      resetInactivityTimer();
     },
-    [kekSalt, encryptedDek]
+    [kekSalt, encryptedDek, resetInactivityTimer]
   );
 
   return (
@@ -199,6 +260,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         dek,
         needsUnlock,
         getAuthHeaders,
+        authFetch,
         login,
         logout,
         register,

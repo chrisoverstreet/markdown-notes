@@ -1,7 +1,7 @@
 import jsonwebtoken from 'jsonwebtoken';
 
 const secret = process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
-const expiresIn = '7d';
+const expiresIn = '1h';
 
 export interface JwtPayload {
   userId: string;

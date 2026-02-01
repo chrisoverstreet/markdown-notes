@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -6,6 +6,15 @@ import { useAuth } from '../lib/auth';
 import { encryptWithDEK, decryptWithDEK } from '../lib/e2ee';
 
 export type MarkdownViewMode = 'plain' | 'formatted' | 'both';
+
+const STORAGE_KEY_VIEW_MODE = 'markdown-notes-view-mode';
+
+function getStoredViewMode(): MarkdownViewMode {
+  if (typeof window === 'undefined') return 'both';
+  const raw = localStorage.getItem(STORAGE_KEY_VIEW_MODE);
+  if (raw === 'plain' || raw === 'formatted' || raw === 'both') return raw;
+  return 'both';
+}
 
 export interface Note {
   id: string;
@@ -15,21 +24,44 @@ export interface Note {
   updated_at: string;
 }
 
+function formatLastSaved(updatedAt: string): string {
+  const date = new Date(updatedAt);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+
+  if (diffSec < 60) return 'just now';
+  if (diffMin < 60) return `${diffMin} min ago`;
+  if (diffHr < 24 && date.getDate() === now.getDate()) return `${diffHr} hr ago`;
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const savedDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayDiff = Math.floor((today.getTime() - savedDay.getTime()) / (1000 * 60 * 60 * 24));
+
+  const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (dayDiff === 0) return `today at ${timeStr}`;
+  if (dayDiff === 1) return `yesterday at ${timeStr}`;
+  if (date.getFullYear() === now.getFullYear()) return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${timeStr}`;
+  return `${date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} at ${timeStr}`;
+}
+
 export default function NoteDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { dek, getAuthHeaders } = useAuth();
+  const { dek, authFetch } = useAuth();
   const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(true);
-  const [viewMode, setViewMode] = useState<MarkdownViewMode>('both');
+  const [viewMode, setViewMode] = useState<MarkdownViewMode>(getStoredViewMode);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!id || !dek) return;
-    fetch(`/api/notes/${id}`, { credentials: 'include', headers: getAuthHeaders() })
+    authFetch(`/api/notes/${id}`)
       .then((res) => {
         if (!res.ok) throw new Error('Note not found');
         return res.json();
@@ -46,52 +78,79 @@ export default function NoteDetail() {
       })
       .catch(() => navigate('/'))
       .finally(() => setLoading(false));
-  }, [id, dek, navigate, getAuthHeaders]);
+  }, [id, dek, navigate, authFetch]);
 
-  const save = async () => {
-    if (!id || !dek) return;
-    setSaving(true);
-    try {
-      const encryptedTitle = await encryptWithDEK(dek, title);
-      const encryptedContent = await encryptWithDEK(dek, content);
-      const res = await fetch(`/api/notes/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        credentials: 'include',
-        body: JSON.stringify({
-          title: encryptedTitle,
-          content_markdown: encryptedContent,
-        }),
-      });
-      if (res.ok) {
-        const updated = (await res.json()) as Note;
-        const decrypted = {
-          ...updated,
-          title: await decryptWithDEK(dek, updated.title),
-          content_markdown: await decryptWithDEK(dek, updated.content_markdown),
-        };
-        setNote(decrypted);
-        setEditing(false);
+  const save = useCallback(
+    async (exitEditing = false) => {
+      if (!id || !dek) return;
+      setSaving(true);
+      try {
+        const encryptedTitle = await encryptWithDEK(dek, title);
+        const encryptedContent = await encryptWithDEK(dek, content);
+        const res = await authFetch(`/api/notes/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: encryptedTitle,
+            content_markdown: encryptedContent,
+          }),
+        });
+        if (res.ok) {
+          const updated = (await res.json()) as Note;
+          const decrypted = {
+            ...updated,
+            title: await decryptWithDEK(dek, updated.title),
+            content_markdown: await decryptWithDEK(dek, updated.content_markdown),
+          };
+          setNote(decrypted);
+          if (exitEditing) setEditing(false);
+        }
+      } finally {
+        setSaving(false);
       }
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+    [id, dek, title, content, authFetch]
+  );
+
+  // Auto-save: debounced save when title or content change (stay in editing mode)
+  const autoSaveDelayMs = 1500;
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!editing || !note || !id || !dek) return;
+    const hasChanges =
+      title !== note.title || content !== note.content_markdown;
+    if (!hasChanges) return;
+
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      save(false);
+    }, autoSaveDelayMs);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+        autoSaveTimeoutRef.current = null;
+      }
+    };
+  }, [editing, note, id, dek, title, content, save]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_VIEW_MODE, viewMode);
+  }, [viewMode]);
 
   const remove = async () => {
     if (!id || !confirm('Delete this note?')) return;
-    const res = await fetch(`/api/notes/${id}`, {
-      method: 'DELETE',
-      credentials: 'include',
-      headers: getAuthHeaders(),
-    });
+    const res = await authFetch(`/api/notes/${id}`, { method: 'DELETE' });
     if (res.ok) navigate('/');
   };
 
   if (loading || !note) return <p className="text-gray-500 dark:text-gray-400">Loading...</p>;
 
-  const showPlain =
-    viewMode === 'plain' || viewMode === 'both' || (viewMode === 'formatted' && editing);
+  const hasChanges =
+    note !== null &&
+    (title !== note.title || content !== note.content_markdown);
+
+  const showPlain = viewMode === 'plain' || viewMode === 'both';
   const showFormatted = viewMode === 'formatted' || viewMode === 'both';
 
   const panelMinHeight = showPlain && showFormatted ? 'min-h-[40vh] md:min-h-[320px]' : 'min-h-[40vh] md:min-h-[320px]';
@@ -105,7 +164,7 @@ export default function NoteDetail() {
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          onBlur={save}
+          onBlur={() => save(true)}
           className="w-full flex-1 min-h-[200px] md:min-h-[280px] p-3 sm:p-4 border border-gray-200 rounded font-mono text-sm resize-y dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-500"
           placeholder="Write markdown here..."
         />
@@ -175,17 +234,18 @@ export default function NoteDetail() {
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          onBlur={save}
+          onBlur={() => save(true)}
           disabled={!editing}
           className="flex-1 min-w-0 text-base sm:text-lg font-medium border-0 border-b border-transparent focus:border-gray-300 focus:outline-none bg-transparent py-2 sm:py-1 dark:text-gray-100 dark:focus:border-gray-500 dark:border-gray-800"
         />
         <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => (editing ? save() : setEditing(true))}
-            className="flex-1 sm:flex-none py-2.5 px-4 text-sm text-gray-600 hover:text-gray-900 rounded border border-gray-200 sm:border-0 touch-manipulation dark:text-gray-300 dark:hover:text-gray-100 dark:border-gray-600"
+            onClick={() => (editing ? save(true) : setEditing(true))}
+            disabled={editing && (!hasChanges || saving)}
+            className="flex-1 sm:flex-none py-2.5 px-4 text-sm text-gray-600 hover:text-gray-900 rounded border border-gray-200 sm:border-0 touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed dark:text-gray-300 dark:hover:text-gray-100 dark:border-gray-600"
           >
-            {editing ? (saving ? 'Saving...' : 'Save') : 'Edit'}
+            {editing ? 'Save' : 'Edit'}
           </button>
           <button
             type="button"
@@ -196,6 +256,9 @@ export default function NoteDetail() {
           </button>
         </div>
       </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 -mt-1">
+        Last saved {formatLastSaved(note.updated_at)}
+      </p>
 
       <div className="flex border border-gray-200 rounded-lg p-1 bg-gray-100 w-full sm:w-auto dark:border-gray-600 dark:bg-gray-800">
         {(['plain', 'formatted', 'both'] as const).map((mode) => (
